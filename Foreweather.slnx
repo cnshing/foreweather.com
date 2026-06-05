@@ -1,0 +1,11 @@
+<Solution>
+  <Project Path="src/Foreweather.Android/Foreweather.Android.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="src/Foreweather.Browser/Foreweather.Browser.csproj" />
+  <Project Path="src/Foreweather.Desktop/Foreweather.Desktop.csproj" />
+  <Project Path="src/Foreweather.iOS/Foreweather.iOS.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="src/Foreweather/Foreweather.csproj" />
+</Solution>
