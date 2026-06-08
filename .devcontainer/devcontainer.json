@@ -7,7 +7,6 @@
   // Features to add to the dev container. More info: https://containers.dev/features.
   "features": {
     "ghcr.io/devcontainers/features/java:1": {},
-    "ghcr.io/Evit15/devcontainer-features/adb-fastboot:1": {},
     "ghcr.io/casl0/devcontainer-features/android-sdk:1": {},
   },
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
