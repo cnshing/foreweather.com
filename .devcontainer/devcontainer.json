@@ -1,0 +1,41 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/dotnet
+{
+  "name": "C# (.NET)",
+  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+  "image": "mcr.microsoft.com/devcontainers/dotnet:1-9.0-bookworm",
+  // Features to add to the dev container. More info: https://containers.dev/features.
+  "features": {
+    "ghcr.io/devcontainers/features/java:1": {},
+    "ghcr.io/Evit15/devcontainer-features/adb-fastboot:1": {},
+    "ghcr.io/casl0/devcontainer-features/android-sdk:1": {},
+  },
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  "forwardPorts": [
+    5235,
+    7169
+  ],
+  "portsAttributes": {
+    "label": "Foreweather.Browser.HTTP",
+    "5235": {
+      "protocol": "http"
+    },
+    "label": "Foreweather.Browser.HTTPS",
+    "7169": {
+      "protocol": "https"
+    }
+  }
+
+  // Use 'postCreateCommand' to run commands after the container is created.
+  "postCreateCommand": "dotnet workload restore && dotnet restore",
+
+
+  // Configure tool-specific properties.
+  "customizations": {
+    "jetbrains": {
+      "backend": "Rider"
+    }
+  },
+  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+  // "remoteUser": "root"
+}
