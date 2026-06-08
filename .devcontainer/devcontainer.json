@@ -16,20 +16,20 @@
     7169
   ],
   "portsAttributes": {
-    "label": "Foreweather.Browser.HTTP",
     "5235": {
+      "label": "Foreweather.Browser.HTTP",
       "protocol": "http"
     },
-    "label": "Foreweather.Browser.HTTPS",
     "7169": {
+      "label": "Foreweather.Browser.HTTPS",
       "protocol": "https"
     }
-  }
-
+  },
+  
   // Use 'postCreateCommand' to run commands after the container is created.
   "postCreateCommand": "dotnet workload restore && dotnet restore",
-
-
+  
+  
   // Configure tool-specific properties.
   "customizations": {
     "jetbrains": {
