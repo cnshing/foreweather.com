@@ -3,11 +3,15 @@
 {
   "name": "C# (.NET)",
   // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-  "image": "mcr.microsoft.com/devcontainers/dotnet:1-9.0-bookworm",
+  "image": "mcr.microsoft.com/devcontainers/base:1-bookworm",
   // Features to add to the dev container. More info: https://containers.dev/features.
   "features": {
     "ghcr.io/devcontainers/features/java:1": {},
     "ghcr.io/casl0/devcontainer-features/android-sdk:1": {},
+    "ghcr.io/devcontainers/features/dotnet:2": {
+      "version": "lts",
+      "workloads": "android,wasm-tools"
+    },
   },
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
   "forwardPorts": [
@@ -25,6 +29,7 @@
     }
   },
   
+  
   // Use 'postCreateCommand' to run commands after the container is created.
   "postCreateCommand": "dotnet workload restore && dotnet restore",
   
@@ -35,6 +40,7 @@
       "backend": "Rider"
     }
   },
+  
   // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
   // "remoteUser": "root"
 }
