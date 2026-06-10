@@ -28,7 +28,8 @@
       "protocol": "https"
     }
   },
-  
+
+  "userEnvProbe": "loginShell", // loginInteractiveShell fails to run postCreateCommand with malformed .bashrc 
   
   // Use 'postCreateCommand' to run commands after the container is created.
   "postCreateCommand": "dotnet workload restore && dotnet restore",
