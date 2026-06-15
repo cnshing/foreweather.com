@@ -29,10 +29,10 @@
     }
   },
 
-  "userEnvProbe": "loginShell", // loginInteractiveShell fails to run postCreateCommand with malformed .bashrc 
+  "userEnvProbe": "none", // loginInteractiveShell/loginShell fails to run postCreateCommand with malformed .bashrc 
   
   // Use 'postCreateCommand' to run commands after the container is created.
-  "postCreateCommand": "sudo dotnet workload restore && dotnet restore",
+  "postCreateCommand": "dotnet workload restore && dotnet restore",
   
   
   // Configure tool-specific properties.
@@ -43,5 +43,5 @@
   },
   
   // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-  // "remoteUser": "root"
+  "remoteUser": "root"
 }
