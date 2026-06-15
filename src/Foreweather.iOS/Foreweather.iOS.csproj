@@ -8,7 +8,7 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
-    <ItemGroup>
+    <ItemGroup Condition="!$([MSBuild]::IsOsPlatform('Linux'))">
         <PackageReference Include="Avalonia.iOS"/>
     </ItemGroup>
 
