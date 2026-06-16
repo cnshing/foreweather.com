@@ -15,7 +15,7 @@
       "workloads": "android,wasm-tools"
     },
     "ghcr.io/devcontainers-extra/features/apt-get-packages:1": {
-      "packages": "libfontconfig1,python3"
+      "packages": "libfontconfig1,python3" // Required dependencies for SkiaSharp and wasm-tools respectively
     }
   },
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
