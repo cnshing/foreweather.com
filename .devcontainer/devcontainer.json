@@ -6,12 +6,17 @@
   "image": "mcr.microsoft.com/devcontainers/base:1-bookworm",
   // Features to add to the dev container. More info: https://containers.dev/features.
   "features": {
-    "ghcr.io/devcontainers/features/java:1": {},
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "21"
+    },
     "ghcr.io/casl0/devcontainer-features/android-sdk:1": {},
     "ghcr.io/devcontainers/features/dotnet:2": {
       "version": "lts",
       "workloads": "android,wasm-tools"
     },
+    "ghcr.io/devcontainers-extra/features/apt-get-packages:1": {
+      "packages": "libfontconfig1,python3"
+    }
   },
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
   "forwardPorts": [
