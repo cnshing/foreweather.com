@@ -20,19 +20,24 @@
   },
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
   "forwardPorts": [
-    5235,
-    7169
+    "5235:5235",
+    "7169:7169"
   ],
   "portsAttributes": {
-    "5235": {
+    "5235:5235": {
       "label": "Foreweather.Browser.HTTP",
-      "protocol": "http"
+      "protocol": "http",
+      "requireLocalPort": true,
+      "elevateIfNeeded": true
     },
-    "7169": {
+    "7169:7169": {
       "label": "Foreweather.Browser.HTTPS",
-      "protocol": "https"
+      "protocol": "https",
+      "requireLocalPort": true,
+      "elevateIfNeeded": true
     }
   },
+  
 
   "userEnvProbe": "none", // loginInteractiveShell/loginShell fails to run postCreateCommand with malformed .bashrc 
   
