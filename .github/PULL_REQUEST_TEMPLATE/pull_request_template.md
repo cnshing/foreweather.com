@@ -8,6 +8,7 @@ Affected platforms
 - [] Android
 - [] Desktop
 - [] iOS
+- [] None
 
 This PR aims to...
 
