@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <!-- iOS builds for Linux not available from  https://github.com/dotnet/macios/issues/18634#issuecomment-1669401771 -->
+        <TargetFramework Condition="!$([MSBuild]::IsOSPlatform('Linux'))">net10.0-ios</TargetFramework>
+        <TargetFramework Condition="$([MSBuild]::IsOSPlatform('Linux'))">net10.0</TargetFramework>
+        <SupportedOSPlatformVersion>13.0</SupportedOSPlatformVersion>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup Condition="!$([MSBuild]::IsOsPlatform('Linux'))">
+        <PackageReference Include="Avalonia.iOS"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Foreweather\Foreweather.csproj"/>
+    </ItemGroup>
+</Project>
