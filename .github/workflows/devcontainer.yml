@@ -29,6 +29,8 @@ on:
         type: boolean
         default: true
 
+  push:
+
 permissions:
   contents: read
   packages: write
