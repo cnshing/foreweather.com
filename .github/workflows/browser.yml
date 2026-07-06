@@ -25,8 +25,20 @@ permissions:
 
 jobs:
   publish:
-    uses: ./.github/workflows/devcontainer.yml
-    with:
-      image_tag: ${{ inputs.image_tag }}
-      push: false
-      run_cmd: dotnet publish Foreweather.Browser/Foreweather.Browser.csproj -c Release
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Publish browser inside devcontainer
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ${{ env.IMAGE_NAME }}
+          imageTag: ${{ inputs.image_tag }}
+          cacheFrom: ${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+          push: never
+          runCmd: dotnet publish Foreweather.Browser/Foreweather.Browser.csproj -c Release
