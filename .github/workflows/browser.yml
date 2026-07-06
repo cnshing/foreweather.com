@@ -18,10 +18,16 @@ on:
         required: false
         type: string
         default: "latest"
+    secrets:
+      CLOUDFLARE_DEPLOY_PAGES:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
 
 permissions:
   contents: read
   packages: read
+  deployments: write
 
 jobs:
   publish:
@@ -29,6 +35,7 @@ jobs:
 
     env:
       IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer
+      PUBLISH_DIR: artifacts/browser
 
     steps:
       - name: Checkout
@@ -41,4 +48,23 @@ jobs:
           imageTag: ${{ inputs.image_tag }}
           cacheFrom: ${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
           push: never
-          runCmd: dotnet publish src/Foreweather.Browser -c Release
+          runCmd: |
+            dotnet publish src/Foreweather.Browser \
+              -c Release \
+              -o ${{ env.PUBLISH_DIR }}
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_DEPLOY_PAGES }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: >
+            pages deploy ${{ env.PUBLISH_DIR }}/wwwroot
+            --project-name=foreweather-com
+            --branch=${{ github.ref_name }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print deployment URL
+        run: echo "${{ steps.deploy.outputs.deployment-url }}"
