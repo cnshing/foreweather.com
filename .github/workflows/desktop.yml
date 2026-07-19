@@ -1,0 +1,118 @@
+name: Publish desktop release
+
+run-name: Publish desktop using devcontainer:${{ inputs.image_tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    strategy:
+      # One RID failing must not cancel the others; no max-parallel so all
+      # legs run concurrently.
+      fail-fast: false
+      matrix:
+        rid:
+          - win-x64
+          - win-arm64
+          - linux-x64
+          - linux-arm64
+          - linux-arm
+          - osx-x64
+          - osx-arm64
+
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer
+      PUBLISH_DIR: artifacts/desktop/${{ matrix.rid }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Publish ${{ matrix.rid }} inside devcontainer
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ${{ env.IMAGE_NAME }}
+          imageTag: ${{ inputs.image_tag }}
+          cacheFrom: ${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+          push: never
+          runCmd: |
+            dotnet publish src/Foreweather.Desktop \
+              -c Release \
+              -r ${{ matrix.rid }} \
+              --self-contained true \
+              -p:PublishSingleFile=true \
+              -p:IncludeNativeLibrariesForSelfExtract=true \
+              -p:PublishTrimmed=true \
+              -p:DebugType=None \
+              -p:DebugSymbols=false \
+              -o ${{ env.PUBLISH_DIR }}
+
+      # The bundle is ad-hoc signed only (no Developer ID / notarization), so
+      # downloaded copies stay quarantined by Gatekeeper until right-click ->
+      # Open or `xattr -dr com.apple.quarantine Foreweather.app`.
+      - name: Assemble macOS app bundle
+        if: startsWith(matrix.rid, 'osx-')
+        shell: bash
+        run: |
+          # The devcontainer runs as root, so reclaim the publish output first.
+          sudo chown -R "$(id -u):$(id -g)" artifacts
+          APP="${{ env.PUBLISH_DIR }}/Foreweather.app"
+          mkdir -p "$APP/Contents/MacOS"
+          mv "${{ env.PUBLISH_DIR }}/Foreweather.Desktop" "$APP/Contents/MacOS/Foreweather.Desktop"
+          chmod +x "$APP/Contents/MacOS/Foreweather.Desktop"
+          cat > "$APP/Contents/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>Foreweather.Desktop</string>
+              <key>CFBundleName</key>
+              <string>Foreweather</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.foreweather.app</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1.0</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>LSMinimumSystemVersion</key>
+              <string>13.0</string>
+          </dict>
+          </plist>
+          EOF
+          # Zip on the host with Info-ZIP: it preserves the executable bit,
+          # which upload-artifact's own archive does not.
+          (cd "${{ env.PUBLISH_DIR }}" && zip -r Foreweather.app.zip Foreweather.app)
+          rm -rf "$APP"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: foreweather-desktop-${{ matrix.rid }}
+          path: ${{ env.PUBLISH_DIR }}
+          if-no-files-found: error

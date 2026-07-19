@@ -1,0 +1,59 @@
+name: Publish android release
+
+run-name: Publish android using devcontainer:${{ inputs.image_tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer
+      PUBLISH_DIR: artifacts/android
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Default RuntimeIdentifiers cover all supported ABIs (arm, arm64, x86,
+      # x64) in a single multi-ABI apk; AndroidPackageFormat=apk comes from the
+      # csproj. With no keystore configured the Release package is signed with
+      # the auto-generated debug keystore, so it is installable for testing.
+      - name: Publish apk inside devcontainer
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ${{ env.IMAGE_NAME }}
+          imageTag: ${{ inputs.image_tag }}
+          cacheFrom: ${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+          push: never
+          runCmd: |
+            dotnet publish src/Foreweather.Android \
+              -c Release \
+              -o ${{ env.PUBLISH_DIR }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: foreweather-android-apk
+          path: ${{ env.PUBLISH_DIR }}/*-Signed.apk
+          if-no-files-found: error
