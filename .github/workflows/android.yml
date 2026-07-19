@@ -3,6 +3,11 @@ name: Publish android release
 run-name: Publish android using devcontainer:${{ inputs.image_tag }}
 
 on:
+  # Temporary: registers the workflow so it becomes dispatchable; remove once
+  # merged to main (same pattern browser.yml followed).
+  push:
+    branches: [ci-build]
+
   workflow_dispatch:
     inputs:
       image_tag:
@@ -29,6 +34,7 @@ jobs:
 
     env:
       IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer
+      IMAGE_TAG: ${{ inputs.image_tag || 'latest' }}
       PUBLISH_DIR: artifacts/android
 
     steps:
@@ -43,8 +49,8 @@ jobs:
         uses: devcontainers/ci@v0.3
         with:
           imageName: ${{ env.IMAGE_NAME }}
-          imageTag: ${{ inputs.image_tag }}
-          cacheFrom: ${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+          imageTag: ${{ env.IMAGE_TAG }}
+          cacheFrom: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           push: never
           runCmd: |
             dotnet publish src/Foreweather.Android \
