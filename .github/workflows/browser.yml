@@ -19,9 +19,9 @@ on:
         type: string
         default: "latest"
     secrets:
-      CLOUDFLARE_DEPLOY_PAGES:
+      NETLIFY_DEPLOY_TOKEN:
         required: true
-      CLOUDFLARE_ACCOUNT_ID:
+      NETLIFY_SITE_ID:
         required: true
 
 permissions:
@@ -53,18 +53,21 @@ jobs:
               -c Release \
               -o ${{ env.PUBLISH_DIR }}
 
-      - name: Deploy to Cloudflare Pages
+      - name: Deploy to Netlify
         id: deploy
-        uses: cloudflare/wrangler-action@v4
+        uses: nwtgck/actions-netlify@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_DEPLOY_PAGES }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4"
-          command: >
-            pages deploy ${{ env.PUBLISH_DIR }}/wwwroot
-            --project-name=foreweather-com
-            --branch=${{ github.ref_name }}
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          publish-dir: ${{ env.PUBLISH_DIR }}/wwwroot
+          production-branch: main
+          production-deploy: ${{ github.ref_name == 'main' }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Deploy using devcontainer:${{ inputs.image_tag }}"
+          enable-pull-request-comment: true
+          enable-commit-comment: false
+          overwrites-pull-request-comment: true
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_DEPLOY_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
 
       - name: Print deployment URL
-        run: echo "${{ steps.deploy.outputs.deployment-url }}"
+        run: echo "${{ steps.deploy.outputs.deploy-url }}"
