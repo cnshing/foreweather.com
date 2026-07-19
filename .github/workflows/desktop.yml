@@ -73,6 +73,9 @@ jobs:
               -p:DebugType=None \
               -p:DebugSymbols=false \
               -o ${{ env.PUBLISH_DIR }}
+            # SkiaSharp/HarfBuzz runtime packages ship native .pdb files for
+            # win RIDs that DebugType=None does not suppress (~105 MB).
+            rm -f ${{ env.PUBLISH_DIR }}/*.pdb
 
       # The bundle is ad-hoc signed only (no Developer ID / notarization), so
       # downloaded copies stay quarantined by Gatekeeper until right-click ->
