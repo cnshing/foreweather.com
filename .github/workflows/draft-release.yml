@@ -94,6 +94,7 @@ jobs:
       # Inputs/outputs enter scripts via env, never inline in `run`, to avoid
       # shell injection and quoting surprises.
       INPUT_TAG: ${{ inputs.tag_name }}
+      INPUT_SHA: ${{ inputs.sha }}
       DEPLOY_URL: ${{ needs.browser.outputs.deploy_url }}
       GH_TOKEN: ${{ github.token }}
 
@@ -165,10 +166,16 @@ jobs:
           - Android: 5 debug-signed apk variants
           EOF
 
-          gh release create "$TAG" \
-            --draft \
-            --target "$FULL_SHA" \
-            --title "Foreweather $TAG" \
-            --notes-file notes.md \
-            --generate-notes \
-            assets/*
+          args=(--draft --title "Foreweather $TAG" --notes-file notes.md --generate-notes)
+          # GITHUB_TOKEN may only create a release targeting a branch tip;
+          # --target with an older SHA fails with 403 (cli/cli#9514). When the
+          # sha input pins a commit, push the tag at it first and create the
+          # release on the tag -- note the tag then exists before the draft is
+          # published (delete strays with `gh release delete --cleanup-tag`).
+          if [ -n "$INPUT_SHA" ]; then
+            git tag "$TAG" "$FULL_SHA"
+            git push origin "refs/tags/$TAG"
+          else
+            args+=(--target "$FULL_SHA")
+          fi
+          gh release create "$TAG" "${args[@]}" assets/*
