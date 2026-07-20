@@ -58,8 +58,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Empty means checkout's default: the triggering ref.
+          # Empty means checkout's default: the triggering ref. Full history
+          # because github.com only serves fetch-by-SHA for ref tips, so a
+          # shallow fetch of an older `sha` fails with "not our ref".
           ref: ${{ inputs.sha }}
+          fetch-depth: 0
 
       - name: Publish browser inside devcontainer
         uses: devcontainers/ci@v0.3

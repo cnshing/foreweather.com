@@ -101,8 +101,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Empty means checkout's default: the triggering ref.
+          # Empty means checkout's default: the triggering ref. Full history
+          # because github.com only serves fetch-by-SHA for ref tips, so a
+          # shallow fetch of an older `sha` fails with "not our ref".
           ref: ${{ inputs.sha }}
+          fetch-depth: 0
 
       # merge-multiple stays false: one directory per artifact under dist/,
       # otherwise the five identically named *-Signed.apk files would clobber
