@@ -1,0 +1,103 @@
+name: Publish browser release
+
+run-name: Publish browser using devcontainer:${{ inputs.image_tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
+
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      NETLIFY_DEPLOY_TOKEN:
+        required: true
+      NETLIFY_SITE_ID:
+        required: true
+    outputs:
+      deploy_url:
+        description: "Netlify deployment URL"
+        value: ${{ jobs.publish.outputs.deploy_url }}
+
+permissions:
+  contents: read
+  packages: read
+  deployments: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    outputs:
+      deploy_url: ${{ steps.deploy.outputs.deploy-url }}
+
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer
+      PUBLISH_DIR: artifacts/browser
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Empty means checkout's default: the triggering ref. Full history
+          # because github.com only serves fetch-by-SHA for ref tips, so a
+          # shallow fetch of an older `sha` fails with "not our ref".
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      - name: Publish browser inside devcontainer
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ${{ env.IMAGE_NAME }}
+          imageTag: ${{ inputs.image_tag }}
+          cacheFrom: ${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+          push: never
+          runCmd: |
+            dotnet publish src/Foreweather.Browser \
+              -c Release \
+              -o ${{ env.PUBLISH_DIR }}
+
+      - name: Deploy to Netlify
+        id: deploy
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: ${{ env.PUBLISH_DIR }}/wwwroot
+          production-branch: main
+          production-deploy: ${{ github.ref_name == 'main' }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Deploy using devcontainer:${{ inputs.image_tag }}"
+          enable-pull-request-comment: true
+          enable-commit-comment: false
+          overwrites-pull-request-comment: true
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_DEPLOY_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+      - name: Print deployment URL
+        run: echo "${{ steps.deploy.outputs.deploy-url }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: foreweather-browser
+          path: ${{ env.PUBLISH_DIR }}/wwwroot
+          if-no-files-found: error

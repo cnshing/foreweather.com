@@ -1,0 +1,168 @@
+name: Draft release
+
+run-name: Draft release ${{ inputs.tag_name || '(auto tag)' }} using devcontainer:${{ inputs.image_tag || 'latest' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
+      tag_name:
+        description: "Release tag (default: v<date>-<short-sha>)"
+        required: false
+        type: string
+        default: ""
+
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
+      tag_name:
+        description: "Release tag (default: v<date>-<short-sha>)"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      NETLIFY_DEPLOY_TOKEN:
+        required: true
+      NETLIFY_SITE_ID:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The per-target booleans of desktop.yml/android.yml are deliberately not
+  # re-exposed: their defaults are all true, so a draft release always builds
+  # every artifact.
+  desktop:
+    uses: ./.github/workflows/desktop.yml
+    permissions:
+      contents: read
+      packages: read
+    with:
+      image_tag: ${{ inputs.image_tag || 'latest' }}
+      sha: ${{ inputs.sha }}
+
+  android:
+    uses: ./.github/workflows/android.yml
+    permissions:
+      contents: read
+      packages: read
+    with:
+      image_tag: ${{ inputs.image_tag || 'latest' }}
+      sha: ${{ inputs.sha }}
+
+  browser:
+    uses: ./.github/workflows/browser.yml
+    permissions:
+      contents: read
+      packages: read
+      deployments: write
+    with:
+      image_tag: ${{ inputs.image_tag || 'latest' }}
+      sha: ${{ inputs.sha }}
+    secrets:
+      NETLIFY_DEPLOY_TOKEN: ${{ secrets.NETLIFY_DEPLOY_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+  draft:
+    needs: [desktop, android, browser]
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    env:
+      # Inputs/outputs enter scripts via env, never inline in `run`, to avoid
+      # shell injection and quoting surprises.
+      INPUT_TAG: ${{ inputs.tag_name }}
+      DEPLOY_URL: ${{ needs.browser.outputs.deploy_url }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Empty means checkout's default: the triggering ref. Full history
+          # because github.com only serves fetch-by-SHA for ref tips, so a
+          # shallow fetch of an older `sha` fails with "not our ref".
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      # merge-multiple stays false: one directory per artifact under dist/,
+      # otherwise the five identically named *-Signed.apk files would clobber
+      # each other.
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: foreweather-*
+          path: dist
+
+      - name: Stage release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+
+          # Desktop and android artifacts each hold one release-ready file
+          # (foreweather-desktop-<rid>.{exe,bin,app.zip},
+          # foreweather-android-<abi>.apk) -- attach them as-is.
+          mv dist/foreweather-desktop-*/* dist/foreweather-android-*/* assets/
+
+          # Browser: zip the deployed wwwroot payload (the one deliberate
+          # zip asset).
+          (cd dist/foreweather-browser && zip -r "$GITHUB_WORKSPACE/assets/foreweather-browser.zip" .)
+
+          ls -l assets
+
+      - name: Create draft release
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL_SHA="$(git rev-parse HEAD)"
+          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+          TAG="${INPUT_TAG:-v$(date -u +%Y.%m.%d)-$SHORT_SHA}"
+
+          cat > notes.md <<EOF
+          Draft release built from commit \`$FULL_SHA\`.
+
+          - Browser deployment (Netlify): $DEPLOY_URL
+          - Desktop: 7 self-contained builds; linux \`.bin\` needs \`chmod +x\` after download; the macOS \`.app\` (zipped) is ad-hoc signed -- right-click Open or \`xattr -dr com.apple.quarantine Foreweather.app\`
+          - Android: 5 debug-signed apk variants
+          EOF
+
+          args=(--draft --title "Foreweather $TAG" --notes-file notes.md --generate-notes)
+          # The workflow never creates tags. If $TAG already exists
+          # (pre-pushed manually to pin an older commit -- GITHUB_TOKEN
+          # cannot --target a non-tip sha, cli/cli#9514), the release is
+          # drafted on it after verifying it matches the built commit;
+          # otherwise --target pins the built tip and the tag is only
+          # created when the draft is published. Tags are visible locally
+          # thanks to the fetch-depth: 0 checkout.
+          if TAG_SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}"); then
+            if [ "$TAG_SHA" != "$FULL_SHA" ]; then
+              echo "::error::Tag $TAG points at $TAG_SHA, not the built commit $FULL_SHA"
+              exit 1
+            fi
+          else
+            args+=(--target "$FULL_SHA")
+          fi
+          gh release create "$TAG" "${args[@]}" assets/*

@@ -1,0 +1,262 @@
+name: Publish desktop release
+
+run-name: Publish desktop using devcontainer:${{ inputs.image_tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
+      win_x64:
+        description: "Publish win-x64"
+        required: false
+        type: boolean
+        default: true
+      win_arm64:
+        description: "Publish win-arm64"
+        required: false
+        type: boolean
+        default: true
+      linux_x64:
+        description: "Publish linux-x64"
+        required: false
+        type: boolean
+        default: true
+      linux_arm64:
+        description: "Publish linux-arm64"
+        required: false
+        type: boolean
+        default: true
+      linux_arm:
+        description: "Publish linux-arm"
+        required: false
+        type: boolean
+        default: true
+      osx_x64:
+        description: "Publish osx-x64"
+        required: false
+        type: boolean
+        default: true
+      osx_arm64:
+        description: "Publish osx-arm64"
+        required: false
+        type: boolean
+        default: true
+
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
+      win_x64:
+        description: "Publish win-x64"
+        required: false
+        type: boolean
+        default: true
+      win_arm64:
+        description: "Publish win-arm64"
+        required: false
+        type: boolean
+        default: true
+      linux_x64:
+        description: "Publish linux-x64"
+        required: false
+        type: boolean
+        default: true
+      linux_arm64:
+        description: "Publish linux-arm64"
+        required: false
+        type: boolean
+        default: true
+      linux_arm:
+        description: "Publish linux-arm"
+        required: false
+        type: boolean
+        default: true
+      osx_x64:
+        description: "Publish osx-x64"
+        required: false
+        type: boolean
+        default: true
+      osx_arm64:
+        description: "Publish osx-arm64"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+
+    outputs:
+      rids: ${{ steps.select.outputs.rids }}
+
+    env:
+      # Booleans come from workflow_dispatch or workflow_call (default true);
+      # the push trigger sees no inputs at all (build everything).
+      WIN_X64: ${{ inputs.win_x64 }}
+      WIN_ARM64: ${{ inputs.win_arm64 }}
+      LINUX_X64: ${{ inputs.linux_x64 }}
+      LINUX_ARM64: ${{ inputs.linux_arm64 }}
+      LINUX_ARM: ${{ inputs.linux_arm }}
+      OSX_X64: ${{ inputs.osx_x64 }}
+      OSX_ARM64: ${{ inputs.osx_arm64 }}
+
+    steps:
+      - name: Select runtime identifiers
+        id: select
+        run: |
+          declare -A flags=(
+            [win-x64]="$WIN_X64"
+            [win-arm64]="$WIN_ARM64"
+            [linux-x64]="$LINUX_X64"
+            [linux-arm64]="$LINUX_ARM64"
+            [linux-arm]="$LINUX_ARM"
+            [osx-x64]="$OSX_X64"
+            [osx-arm64]="$OSX_ARM64"
+          )
+          rids=()
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 linux-arm osx-x64 osx-arm64; do
+            if [ "${flags[$rid]}" = "false" ]; then
+              continue
+            fi
+            rids+=("$rid")
+          done
+          if [ ${#rids[@]} -eq 0 ]; then
+            echo "::error::No runtime identifiers selected"
+            exit 1
+          fi
+          echo "rids=$(printf '%s\n' "${rids[@]}" | jq -cRn '[inputs]')" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: select
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      # One RID failing must not cancel the others; no max-parallel so all
+      # legs run concurrently.
+      fail-fast: false
+      matrix:
+        rid: ${{ fromJSON(needs.select.outputs.rids) }}
+
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer
+      IMAGE_TAG: ${{ inputs.image_tag || 'latest' }}
+      PUBLISH_DIR: artifacts/desktop/${{ matrix.rid }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Empty means checkout's default: the triggering ref. Full history
+          # because github.com only serves fetch-by-SHA for ref tips, so a
+          # shallow fetch of an older `sha` fails with "not our ref".
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      - name: Publish ${{ matrix.rid }} inside devcontainer
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ${{ env.IMAGE_NAME }}
+          imageTag: ${{ env.IMAGE_TAG }}
+          cacheFrom: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          push: never
+          runCmd: |
+            dotnet publish src/Foreweather.Desktop \
+              -c Release \
+              -r ${{ matrix.rid }} \
+              --self-contained true \
+              -p:PublishSingleFile=true \
+              -p:IncludeNativeLibrariesForSelfExtract=true \
+              -p:PublishTrimmed=true \
+              -p:DebugType=None \
+              -p:DebugSymbols=false \
+              -o ${{ env.PUBLISH_DIR }}
+            # SkiaSharp/HarfBuzz runtime packages ship native .pdb files for
+            # win RIDs that DebugType=None does not suppress (~105 MB).
+            rm -f ${{ env.PUBLISH_DIR }}/*.pdb
+            # Rename to the release-ready file; osx keeps the raw binary for
+            # the .app bundle assembled on the host afterwards.
+            RID="${{ matrix.rid }}"
+            case "$RID" in
+              win-*)
+                mv ${{ env.PUBLISH_DIR }}/Foreweather.Desktop.exe \
+                   ${{ env.PUBLISH_DIR }}/foreweather-desktop-$RID.exe
+                ;;
+              linux-*)
+                mv ${{ env.PUBLISH_DIR }}/Foreweather.Desktop \
+                   ${{ env.PUBLISH_DIR }}/foreweather-desktop-$RID.bin
+                ;;
+            esac
+
+      # The bundle is ad-hoc signed only (no Developer ID / notarization), so
+      # downloaded copies stay quarantined by Gatekeeper until right-click ->
+      # Open or `xattr -dr com.apple.quarantine Foreweather.app`.
+      - name: Assemble macOS app bundle
+        if: startsWith(matrix.rid, 'osx-')
+        shell: bash
+        run: |
+          # The devcontainer runs as root, so reclaim the publish output first.
+          sudo chown -R "$(id -u):$(id -g)" artifacts
+          APP="${{ env.PUBLISH_DIR }}/Foreweather.app"
+          mkdir -p "$APP/Contents/MacOS"
+          mv "${{ env.PUBLISH_DIR }}/Foreweather.Desktop" "$APP/Contents/MacOS/Foreweather.Desktop"
+          chmod +x "$APP/Contents/MacOS/Foreweather.Desktop"
+          cat > "$APP/Contents/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>Foreweather.Desktop</string>
+              <key>CFBundleName</key>
+              <string>Foreweather</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.foreweather.app</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1.0</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>LSMinimumSystemVersion</key>
+              <string>13.0</string>
+          </dict>
+          </plist>
+          EOF
+          # Zip on the host with Info-ZIP: it preserves the executable bit,
+          # which upload-artifact's own archive does not. A .app is a
+          # directory bundle, so the zip is also the release asset format.
+          (cd "${{ env.PUBLISH_DIR }}" && zip -r "foreweather-desktop-${{ matrix.rid }}.app.zip" Foreweather.app)
+          rm -rf "$APP"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: foreweather-desktop-${{ matrix.rid }}
+          # Only the single release-ready file (.exe/.bin/.app.zip), so the
+          # artifact download is not a zip nested inside GitHub's own zip.
+          path: ${{ env.PUBLISH_DIR }}/foreweather-desktop-*
+          if-no-files-found: error

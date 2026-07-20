@@ -1,0 +1,187 @@
+name: Publish android release
+
+run-name: Publish android using devcontainer:${{ inputs.image_tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
+      multi_arch:
+        description: "Package multi-arch apk"
+        required: false
+        type: boolean
+        default: true
+      armeabi_v7a:
+        description: "Package armeabi-v7a apk"
+        required: false
+        type: boolean
+        default: true
+      arm64_v8a:
+        description: "Package arm64-v8a apk"
+        required: false
+        type: boolean
+        default: true
+      x86:
+        description: "Package x86 apk"
+        required: false
+        type: boolean
+        default: true
+      x86_64:
+        description: "Package x86_64 apk"
+        required: false
+        type: boolean
+        default: true
+
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Devcontainer image tag"
+        required: false
+        type: string
+        default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
+      multi_arch:
+        description: "Package multi-arch apk"
+        required: false
+        type: boolean
+        default: true
+      armeabi_v7a:
+        description: "Package armeabi-v7a apk"
+        required: false
+        type: boolean
+        default: true
+      arm64_v8a:
+        description: "Package arm64-v8a apk"
+        required: false
+        type: boolean
+        default: true
+      x86:
+        description: "Package x86 apk"
+        required: false
+        type: boolean
+        default: true
+      x86_64:
+        description: "Package x86_64 apk"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+
+    outputs:
+      targets: ${{ steps.select.outputs.targets }}
+
+    env:
+      # Booleans come from workflow_dispatch or workflow_call (default true);
+      # the push trigger sees no inputs at all (build everything).
+      MULTI_ARCH: ${{ inputs.multi_arch }}
+      ARMEABI_V7A: ${{ inputs.armeabi_v7a }}
+      ARM64_V8A: ${{ inputs.arm64_v8a }}
+      X86: ${{ inputs.x86 }}
+      X86_64: ${{ inputs.x86_64 }}
+
+    steps:
+      - name: Select CPU architectures
+        id: select
+        run: |
+          # name:rid pairs; multi-arch has no RID (publish without -r packages
+          # every ABI the .NET Android SDK supports into one apk).
+          declare -A rids=(
+            [multi-arch]=""
+            [armeabi-v7a]="android-arm"
+            [arm64-v8a]="android-arm64"
+            [x86]="android-x86"
+            [x86_64]="android-x64"
+          )
+          declare -A flags=(
+            [multi-arch]="$MULTI_ARCH"
+            [armeabi-v7a]="$ARMEABI_V7A"
+            [arm64-v8a]="$ARM64_V8A"
+            [x86]="$X86"
+            [x86_64]="$X86_64"
+          )
+          targets=()
+          for abi in multi-arch armeabi-v7a arm64-v8a x86 x86_64; do
+            if [ "${flags[$abi]}" = "false" ]; then
+              continue
+            fi
+            targets+=("$abi:${rids[$abi]}")
+          done
+          if [ ${#targets[@]} -eq 0 ]; then
+            echo "::error::No CPU architectures selected"
+            exit 1
+          fi
+          echo "targets=$(jq -cn '$ARGS.positional | map(split(":") | {name: .[0], rid: .[1]})' --args "${targets[@]}")" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: select
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      # One ABI failing must not cancel the others; no max-parallel so all
+      # legs run concurrently.
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.select.outputs.targets) }}
+
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer
+      IMAGE_TAG: ${{ inputs.image_tag || 'latest' }}
+      PUBLISH_DIR: artifacts/android/${{ matrix.target.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Empty means checkout's default: the triggering ref. Full history
+          # because github.com only serves fetch-by-SHA for ref tips, so a
+          # shallow fetch of an older `sha` fails with "not our ref".
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      # AndroidPackageFormat=apk comes from the csproj. With no keystore
+      # configured the Release package is signed with the auto-generated debug
+      # keystore, so it is installable for testing.
+      - name: Publish ${{ matrix.target.name }} apk inside devcontainer
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ${{ env.IMAGE_NAME }}
+          imageTag: ${{ env.IMAGE_TAG }}
+          cacheFrom: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          push: never
+          runCmd: |
+            RID="${{ matrix.target.rid }}"
+            dotnet publish src/Foreweather.Android \
+              -c Release \
+              ${RID:+-r "$RID"} \
+              -o ${{ env.PUBLISH_DIR }}
+            # Rename to the release-ready file name.
+            mv ${{ env.PUBLISH_DIR }}/*-Signed.apk \
+               ${{ env.PUBLISH_DIR }}/foreweather-android-${{ matrix.target.name }}.apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: foreweather-android-${{ matrix.target.name }}
+          path: ${{ env.PUBLISH_DIR }}/foreweather-android-${{ matrix.target.name }}.apk
+          if-no-files-found: error
