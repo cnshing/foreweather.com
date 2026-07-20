@@ -1,0 +1,33 @@
+name: Test workflow_call inputs
+
+# Temporary: exercises the per-target boolean inputs of desktop.yml and
+# android.yml via workflow_call. Delete after verification.
+
+on:
+  push:
+    branches: [ci-build]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  desktop:
+    uses: ./.github/workflows/desktop.yml
+    with:
+      win_x64: true
+      win_arm64: false
+      linux_x64: false
+      linux_arm64: false
+      linux_arm: false
+      osx_x64: false
+      osx_arm64: false
+
+  android:
+    uses: ./.github/workflows/android.yml
+    with:
+      multi_arch: false
+      armeabi_v7a: false
+      arm64_v8a: true
+      x86: false
+      x86_64: false

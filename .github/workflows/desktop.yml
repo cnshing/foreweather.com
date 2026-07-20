@@ -15,6 +15,20 @@ on:
         required: false
         type: string
         default: "latest"
+      rid:
+        description: "Runtime identifier to publish"
+        required: false
+        type: choice
+        default: "all"
+        options:
+          - all
+          - win-x64
+          - win-arm64
+          - linux-x64
+          - linux-arm64
+          - linux-arm
+          - osx-x64
+          - osx-arm64
 
   workflow_call:
     inputs:
@@ -23,13 +37,98 @@ on:
         required: false
         type: string
         default: "latest"
+      win_x64:
+        description: "Publish win-x64"
+        required: false
+        type: boolean
+        default: true
+      win_arm64:
+        description: "Publish win-arm64"
+        required: false
+        type: boolean
+        default: true
+      linux_x64:
+        description: "Publish linux-x64"
+        required: false
+        type: boolean
+        default: true
+      linux_arm64:
+        description: "Publish linux-arm64"
+        required: false
+        type: boolean
+        default: true
+      linux_arm:
+        description: "Publish linux-arm"
+        required: false
+        type: boolean
+        default: true
+      osx_x64:
+        description: "Publish osx-x64"
+        required: false
+        type: boolean
+        default: true
+      osx_arm64:
+        description: "Publish osx-arm64"
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
   packages: read
 
 jobs:
+  select:
+    runs-on: ubuntu-latest
+
+    outputs:
+      rids: ${{ steps.select.outputs.rids }}
+
+    env:
+      # Non-empty only on workflow_dispatch; workflow_call sees the booleans
+      # instead, and the push trigger sees no inputs at all (build everything).
+      RID_CHOICE: ${{ inputs.rid }}
+      WIN_X64: ${{ inputs.win_x64 }}
+      WIN_ARM64: ${{ inputs.win_arm64 }}
+      LINUX_X64: ${{ inputs.linux_x64 }}
+      LINUX_ARM64: ${{ inputs.linux_arm64 }}
+      LINUX_ARM: ${{ inputs.linux_arm }}
+      OSX_X64: ${{ inputs.osx_x64 }}
+      OSX_ARM64: ${{ inputs.osx_arm64 }}
+
+    steps:
+      - name: Select runtime identifiers
+        id: select
+        run: |
+          declare -A flags=(
+            [win-x64]="$WIN_X64"
+            [win-arm64]="$WIN_ARM64"
+            [linux-x64]="$LINUX_X64"
+            [linux-arm64]="$LINUX_ARM64"
+            [linux-arm]="$LINUX_ARM"
+            [osx-x64]="$OSX_X64"
+            [osx-arm64]="$OSX_ARM64"
+          )
+          rids=()
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 linux-arm osx-x64 osx-arm64; do
+            if [ -n "$RID_CHOICE" ]; then
+              if [ "$RID_CHOICE" != "all" ] && [ "$RID_CHOICE" != "$rid" ]; then
+                continue
+              fi
+            elif [ "${flags[$rid]}" = "false" ]; then
+              continue
+            fi
+            rids+=("$rid")
+          done
+          if [ ${#rids[@]} -eq 0 ]; then
+            echo "::error::No runtime identifiers selected"
+            exit 1
+          fi
+          echo "rids=$(printf '%s\n' "${rids[@]}" | jq -cRn '[inputs]')" >> "$GITHUB_OUTPUT"
+
   publish:
+    needs: select
+
     runs-on: ubuntu-latest
 
     strategy:
@@ -37,14 +136,7 @@ jobs:
       # legs run concurrently.
       fail-fast: false
       matrix:
-        rid:
-          - win-x64
-          - win-arm64
-          - linux-x64
-          - linux-arm64
-          - linux-arm
-          - osx-x64
-          - osx-arm64
+        rid: ${{ fromJSON(needs.select.outputs.rids) }}
 
     env:
       IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer

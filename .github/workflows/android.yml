@@ -15,6 +15,18 @@ on:
         required: false
         type: string
         default: "latest"
+      abi:
+        description: "CPU architecture to package"
+        required: false
+        type: choice
+        default: "all"
+        options:
+          - all
+          - multi-arch
+          - armeabi-v7a
+          - arm64-v8a
+          - x86
+          - x86_64
 
   workflow_call:
     inputs:
@@ -23,29 +35,115 @@ on:
         required: false
         type: string
         default: "latest"
+      multi_arch:
+        description: "Package multi-arch apk"
+        required: false
+        type: boolean
+        default: true
+      armeabi_v7a:
+        description: "Package armeabi-v7a apk"
+        required: false
+        type: boolean
+        default: true
+      arm64_v8a:
+        description: "Package arm64-v8a apk"
+        required: false
+        type: boolean
+        default: true
+      x86:
+        description: "Package x86 apk"
+        required: false
+        type: boolean
+        default: true
+      x86_64:
+        description: "Package x86_64 apk"
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
   packages: read
 
 jobs:
-  publish:
+  select:
     runs-on: ubuntu-latest
+
+    outputs:
+      targets: ${{ steps.select.outputs.targets }}
+
+    env:
+      # Non-empty only on workflow_dispatch; workflow_call sees the booleans
+      # instead, and the push trigger sees no inputs at all (build everything).
+      ABI_CHOICE: ${{ inputs.abi }}
+      MULTI_ARCH: ${{ inputs.multi_arch }}
+      ARMEABI_V7A: ${{ inputs.armeabi_v7a }}
+      ARM64_V8A: ${{ inputs.arm64_v8a }}
+      X86: ${{ inputs.x86 }}
+      X86_64: ${{ inputs.x86_64 }}
+
+    steps:
+      - name: Select CPU architectures
+        id: select
+        run: |
+          # name:rid pairs; multi-arch has no RID (publish without -r packages
+          # every ABI the .NET Android SDK supports into one apk).
+          declare -A rids=(
+            [multi-arch]=""
+            [armeabi-v7a]="android-arm"
+            [arm64-v8a]="android-arm64"
+            [x86]="android-x86"
+            [x86_64]="android-x64"
+          )
+          declare -A flags=(
+            [multi-arch]="$MULTI_ARCH"
+            [armeabi-v7a]="$ARMEABI_V7A"
+            [arm64-v8a]="$ARM64_V8A"
+            [x86]="$X86"
+            [x86_64]="$X86_64"
+          )
+          targets=()
+          for abi in multi-arch armeabi-v7a arm64-v8a x86 x86_64; do
+            if [ -n "$ABI_CHOICE" ]; then
+              if [ "$ABI_CHOICE" != "all" ] && [ "$ABI_CHOICE" != "$abi" ]; then
+                continue
+              fi
+            elif [ "${flags[$abi]}" = "false" ]; then
+              continue
+            fi
+            targets+=("$abi:${rids[$abi]}")
+          done
+          if [ ${#targets[@]} -eq 0 ]; then
+            echo "::error::No CPU architectures selected"
+            exit 1
+          fi
+          echo "targets=$(jq -cn '$ARGS.positional | map(split(":") | {name: .[0], rid: .[1]})' --args "${targets[@]}")" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: select
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      # One ABI failing must not cancel the others; no max-parallel so all
+      # legs run concurrently.
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.select.outputs.targets) }}
 
     env:
       IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer
       IMAGE_TAG: ${{ inputs.image_tag || 'latest' }}
-      PUBLISH_DIR: artifacts/android
+      PUBLISH_DIR: artifacts/android/${{ matrix.target.name }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Default RuntimeIdentifiers cover all supported ABIs (arm, arm64, x86,
-      # x64) in a single multi-ABI apk; AndroidPackageFormat=apk comes from the
-      # csproj. With no keystore configured the Release package is signed with
-      # the auto-generated debug keystore, so it is installable for testing.
-      - name: Publish apk inside devcontainer
+      # AndroidPackageFormat=apk comes from the csproj. With no keystore
+      # configured the Release package is signed with the auto-generated debug
+      # keystore, so it is installable for testing.
+      - name: Publish ${{ matrix.target.name }} apk inside devcontainer
         uses: devcontainers/ci@v0.3
         with:
           imageName: ${{ env.IMAGE_NAME }}
@@ -53,13 +151,15 @@ jobs:
           cacheFrom: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           push: never
           runCmd: |
+            RID="${{ matrix.target.rid }}"
             dotnet publish src/Foreweather.Android \
               -c Release \
+              ${RID:+-r "$RID"} \
               -o ${{ env.PUBLISH_DIR }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: foreweather-android-apk
+          name: foreweather-android-${{ matrix.target.name }}
           path: ${{ env.PUBLISH_DIR }}/*-Signed.apk
           if-no-files-found: error
