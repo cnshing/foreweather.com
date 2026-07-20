@@ -15,20 +15,41 @@ on:
         required: false
         type: string
         default: "latest"
-      rid:
-        description: "Runtime identifier to publish"
+      win_x64:
+        description: "Publish win-x64"
         required: false
-        type: choice
-        default: "all"
-        options:
-          - all
-          - win-x64
-          - win-arm64
-          - linux-x64
-          - linux-arm64
-          - linux-arm
-          - osx-x64
-          - osx-arm64
+        type: boolean
+        default: true
+      win_arm64:
+        description: "Publish win-arm64"
+        required: false
+        type: boolean
+        default: true
+      linux_x64:
+        description: "Publish linux-x64"
+        required: false
+        type: boolean
+        default: true
+      linux_arm64:
+        description: "Publish linux-arm64"
+        required: false
+        type: boolean
+        default: true
+      linux_arm:
+        description: "Publish linux-arm"
+        required: false
+        type: boolean
+        default: true
+      osx_x64:
+        description: "Publish osx-x64"
+        required: false
+        type: boolean
+        default: true
+      osx_arm64:
+        description: "Publish osx-arm64"
+        required: false
+        type: boolean
+        default: true
 
   workflow_call:
     inputs:
@@ -85,9 +106,8 @@ jobs:
       rids: ${{ steps.select.outputs.rids }}
 
     env:
-      # Non-empty only on workflow_dispatch; workflow_call sees the booleans
-      # instead, and the push trigger sees no inputs at all (build everything).
-      RID_CHOICE: ${{ inputs.rid }}
+      # Booleans come from workflow_dispatch or workflow_call (default true);
+      # the push trigger sees no inputs at all (build everything).
       WIN_X64: ${{ inputs.win_x64 }}
       WIN_ARM64: ${{ inputs.win_arm64 }}
       LINUX_X64: ${{ inputs.linux_x64 }}
@@ -111,11 +131,7 @@ jobs:
           )
           rids=()
           for rid in win-x64 win-arm64 linux-x64 linux-arm64 linux-arm osx-x64 osx-arm64; do
-            if [ -n "$RID_CHOICE" ]; then
-              if [ "$RID_CHOICE" != "all" ] && [ "$RID_CHOICE" != "$rid" ]; then
-                continue
-              fi
-            elif [ "${flags[$rid]}" = "false" ]; then
+            if [ "${flags[$rid]}" = "false" ]; then
               continue
             fi
             rids+=("$rid")

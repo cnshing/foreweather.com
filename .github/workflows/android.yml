@@ -15,18 +15,31 @@ on:
         required: false
         type: string
         default: "latest"
-      abi:
-        description: "CPU architecture to package"
+      multi_arch:
+        description: "Package multi-arch apk"
         required: false
-        type: choice
-        default: "all"
-        options:
-          - all
-          - multi-arch
-          - armeabi-v7a
-          - arm64-v8a
-          - x86
-          - x86_64
+        type: boolean
+        default: true
+      armeabi_v7a:
+        description: "Package armeabi-v7a apk"
+        required: false
+        type: boolean
+        default: true
+      arm64_v8a:
+        description: "Package arm64-v8a apk"
+        required: false
+        type: boolean
+        default: true
+      x86:
+        description: "Package x86 apk"
+        required: false
+        type: boolean
+        default: true
+      x86_64:
+        description: "Package x86_64 apk"
+        required: false
+        type: boolean
+        default: true
 
   workflow_call:
     inputs:
@@ -73,9 +86,8 @@ jobs:
       targets: ${{ steps.select.outputs.targets }}
 
     env:
-      # Non-empty only on workflow_dispatch; workflow_call sees the booleans
-      # instead, and the push trigger sees no inputs at all (build everything).
-      ABI_CHOICE: ${{ inputs.abi }}
+      # Booleans come from workflow_dispatch or workflow_call (default true);
+      # the push trigger sees no inputs at all (build everything).
       MULTI_ARCH: ${{ inputs.multi_arch }}
       ARMEABI_V7A: ${{ inputs.armeabi_v7a }}
       ARM64_V8A: ${{ inputs.arm64_v8a }}
@@ -104,11 +116,7 @@ jobs:
           )
           targets=()
           for abi in multi-arch armeabi-v7a arm64-v8a x86 x86_64; do
-            if [ -n "$ABI_CHOICE" ]; then
-              if [ "$ABI_CHOICE" != "all" ] && [ "$ABI_CHOICE" != "$abi" ]; then
-                continue
-              fi
-            elif [ "${flags[$abi]}" = "false" ]; then
+            if [ "${flags[$abi]}" = "false" ]; then
               continue
             fi
             targets+=("$abi:${rids[$abi]}")
