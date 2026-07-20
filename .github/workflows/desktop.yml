@@ -3,11 +3,6 @@ name: Publish desktop release
 run-name: Publish desktop using devcontainer:${{ inputs.image_tag }}
 
 on:
-  # Temporary: registers the workflow so it becomes dispatchable; remove once
-  # merged to main (same pattern browser.yml followed).
-  push:
-    branches: [ci-build]
-
   workflow_dispatch:
     inputs:
       image_tag:
