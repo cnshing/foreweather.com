@@ -10,6 +10,11 @@ on:
         required: false
         type: string
         default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
       multi_arch:
         description: "Package multi-arch apk"
         required: false
@@ -43,6 +48,11 @@ on:
         required: false
         type: string
         default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
       multi_arch:
         description: "Package multi-arch apk"
         required: false
@@ -142,6 +152,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Empty means checkout's default: the triggering ref.
+          ref: ${{ inputs.sha }}
 
       # AndroidPackageFormat=apk comes from the csproj. With no keystore
       # configured the Release package is signed with the auto-generated debug

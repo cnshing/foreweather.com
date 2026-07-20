@@ -10,6 +10,11 @@ on:
         required: false
         type: string
         default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
 
   workflow_call:
     inputs:
@@ -18,11 +23,20 @@ on:
         required: false
         type: string
         default: "latest"
+      sha:
+        description: "Commit SHA to build (default: the triggering ref)"
+        required: false
+        type: string
+        default: ""
     secrets:
       NETLIFY_DEPLOY_TOKEN:
         required: true
       NETLIFY_SITE_ID:
         required: true
+    outputs:
+      deploy_url:
+        description: "Netlify deployment URL"
+        value: ${{ jobs.publish.outputs.deploy_url }}
 
 permissions:
   contents: read
@@ -33,6 +47,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
 
+    outputs:
+      deploy_url: ${{ steps.deploy.outputs.deploy-url }}
+
     env:
       IMAGE_NAME: ghcr.io/${{ github.repository }}/devcontainer
       PUBLISH_DIR: artifacts/browser
@@ -40,6 +57,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Empty means checkout's default: the triggering ref.
+          ref: ${{ inputs.sha }}
 
       - name: Publish browser inside devcontainer
         uses: devcontainers/ci@v0.3
@@ -71,3 +91,10 @@ jobs:
 
       - name: Print deployment URL
         run: echo "${{ steps.deploy.outputs.deploy-url }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: foreweather-browser
+          path: ${{ env.PUBLISH_DIR }}/wwwroot
+          if-no-files-found: error
