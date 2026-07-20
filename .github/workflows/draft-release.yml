@@ -169,12 +169,17 @@ jobs:
           args=(--draft --title "Foreweather $TAG" --notes-file notes.md --generate-notes)
           # GITHUB_TOKEN may only create a release targeting a branch tip;
           # --target with an older SHA fails with 403 (cli/cli#9514). When the
-          # sha input pins a commit, push the tag at it first and create the
+          # sha input pins a commit, create the tag at it first and create the
           # release on the tag -- note the tag then exists before the draft is
           # published (delete strays with `gh release delete --cleanup-tag`).
+          # The tag ref is created via the API, not `git push`: pushes with
+          # GITHUB_TOKEN are refused when the ref introduces workflow files
+          # (none exist on main yet), but creating a ref to an existing
+          # commit uploads no objects and skips that check.
           if [ -n "$INPUT_SHA" ]; then
-            git tag "$TAG" "$FULL_SHA"
-            git push origin "refs/tags/$TAG"
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$TAG" \
+              -f sha="$FULL_SHA"
           else
             args+=(--target "$FULL_SHA")
           fi
