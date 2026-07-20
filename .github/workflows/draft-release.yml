@@ -94,7 +94,6 @@ jobs:
       # Inputs/outputs enter scripts via env, never inline in `run`, to avoid
       # shell injection and quoting surprises.
       INPUT_TAG: ${{ inputs.tag_name }}
-      INPUT_SHA: ${{ inputs.sha }}
       DEPLOY_URL: ${{ needs.browser.outputs.deploy_url }}
       GH_TOKEN: ${{ github.token }}
 
@@ -167,19 +166,18 @@ jobs:
           EOF
 
           args=(--draft --title "Foreweather $TAG" --notes-file notes.md --generate-notes)
-          # GITHUB_TOKEN may only create a release targeting a branch tip;
-          # --target with an older SHA fails with 403 (cli/cli#9514). When the
-          # sha input pins a commit, create the tag at it first and create the
-          # release on the tag -- note the tag then exists before the draft is
-          # published (delete strays with `gh release delete --cleanup-tag`).
-          # The tag ref is created via the API, not `git push`: pushes with
-          # GITHUB_TOKEN are refused when the ref introduces workflow files
-          # (none exist on main yet), but creating a ref to an existing
-          # commit uploads no objects and skips that check.
-          if [ -n "$INPUT_SHA" ]; then
-            gh api "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/tags/$TAG" \
-              -f sha="$FULL_SHA"
+          # The workflow never creates tags. If $TAG already exists
+          # (pre-pushed manually to pin an older commit -- GITHUB_TOKEN
+          # cannot --target a non-tip sha, cli/cli#9514), the release is
+          # drafted on it after verifying it matches the built commit;
+          # otherwise --target pins the built tip and the tag is only
+          # created when the draft is published. Tags are visible locally
+          # thanks to the fetch-depth: 0 checkout.
+          if TAG_SHA=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}"); then
+            if [ "$TAG_SHA" != "$FULL_SHA" ]; then
+              echo "::error::Tag $TAG points at $TAG_SHA, not the built commit $FULL_SHA"
+              exit 1
+            fi
           else
             args+=(--target "$FULL_SHA")
           fi
