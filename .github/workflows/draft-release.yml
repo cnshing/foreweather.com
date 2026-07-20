@@ -3,12 +3,6 @@ name: Draft release
 run-name: Draft release ${{ inputs.tag_name || '(auto tag)' }} using devcontainer:${{ inputs.image_tag || 'latest' }}
 
 on:
-  # Temporary trigger to register the workflow for dispatch; remove once the
-  # first run has completed. Inputs are empty on push (build everything,
-  # latest image, auto tag).
-  push:
-    branches: [ci-build]
-
   workflow_dispatch:
     inputs:
       image_tag:
