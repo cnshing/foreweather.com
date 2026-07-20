@@ -120,31 +120,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob
           mkdir -p assets
 
-          # Desktop: osx artifacts already hold an Info-ZIP Foreweather.app.zip
-          # (exec bit preserved inside) -- rename only, never re-zip. win/linux
-          # dirs are re-zipped with Info-ZIP after restoring the exec bit that
-          # upload-artifact stripped.
-          for dir in dist/foreweather-desktop-*; do
-            rid="${dir#dist/foreweather-desktop-}"
-            if [ -f "$dir/Foreweather.app.zip" ]; then
-              mv "$dir/Foreweather.app.zip" "assets/foreweather-desktop-$rid.zip"
-            else
-              [ -f "$dir/Foreweather.Desktop" ] && chmod +x "$dir/Foreweather.Desktop"
-              (cd "$dir" && zip -r "$GITHUB_WORKSPACE/assets/foreweather-desktop-$rid.zip" .)
-            fi
-          done
+          # Desktop and android artifacts each hold one release-ready file
+          # (foreweather-desktop-<rid>.{exe,bin,app.zip},
+          # foreweather-android-<abi>.apk) -- attach them as-is.
+          mv dist/foreweather-desktop-*/* dist/foreweather-android-*/* assets/
 
-          # Android: a single *-Signed.apk sits at each artifact root.
-          for dir in dist/foreweather-android-*; do
-            name="${dir#dist/foreweather-android-}"
-            apks=("$dir"/*-Signed.apk)
-            mv "${apks[0]}" "assets/foreweather-android-$name.apk"
-          done
-
-          # Browser: zip the deployed wwwroot payload.
+          # Browser: zip the deployed wwwroot payload (the one deliberate
+          # zip asset).
           (cd dist/foreweather-browser && zip -r "$GITHUB_WORKSPACE/assets/foreweather-browser.zip" .)
 
           ls -l assets
@@ -161,7 +145,7 @@ jobs:
           Draft release built from commit \`$FULL_SHA\`.
 
           - Browser deployment (Netlify): $DEPLOY_URL
-          - Desktop: 7 self-contained builds (win/linux/osx; the macOS \`.app\` is ad-hoc signed -- right-click Open or \`xattr -dr com.apple.quarantine Foreweather.app\`)
+          - Desktop: 7 self-contained builds; linux \`.bin\` needs \`chmod +x\` after download; the macOS \`.app\` (zipped) is ad-hoc signed -- right-click Open or \`xattr -dr com.apple.quarantine Foreweather.app\`
           - Android: 5 debug-signed apk variants
           EOF
 

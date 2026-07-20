@@ -175,10 +175,13 @@ jobs:
               -c Release \
               ${RID:+-r "$RID"} \
               -o ${{ env.PUBLISH_DIR }}
+            # Rename to the release-ready file name.
+            mv ${{ env.PUBLISH_DIR }}/*-Signed.apk \
+               ${{ env.PUBLISH_DIR }}/foreweather-android-${{ matrix.target.name }}.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: foreweather-android-${{ matrix.target.name }}
-          path: ${{ env.PUBLISH_DIR }}/*-Signed.apk
+          path: ${{ env.PUBLISH_DIR }}/foreweather-android-${{ matrix.target.name }}.apk
           if-no-files-found: error
